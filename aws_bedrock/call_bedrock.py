@@ -1,12 +1,10 @@
 """
-Bedrock Agent에 이미지 전송 및 대화
-config.py의 설정을 사용하여 Bedrock Agent에 연결하고 can.jpg를 전송합니다.
+S3 이미지 URL을 사용하여 Knowledge Base에서 가장 유사한 제품 찾기
+S3 URL을 텍스트로 전달하여 Knowledge Base에서 가장 유사한 제품의 파일명을 반환합니다.
 """
 import boto3
 import json
-import base64
 import os
-import uuid
 from config import AWSConfig
 
 # 환경변수에서 설정 가져오기
@@ -18,162 +16,197 @@ except ImportError:
 
 # Bedrock Agent Runtime 클라이언트 생성
 region = os.getenv("AWS_REGION", "ap-northeast-2")  # 서울 리전
-client = boto3.client("bedrock-agent-runtime", region_name=region)
+bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name=region)
 
-# 로컬 이미지 파일을 base64로 인코딩
-image_path = "testcan.jpg"
+# Knowledge Base ID (환경변수 또는 config에서 가져오기)
+knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID", AWSConfig.knowledge_base_id)
 
-if not os.path.exists(image_path):
-    print(f"❌ 이미지 파일을 찾을 수 없습니다: {image_path}")
-    exit(1)
+# S3 이미지 경로
+s3_uri = "s3://posco-bedrock-vector-s3-12jo/wx_hackerton/product_new/testcan.jpg"
 
-# 이미지를 base64로 인코딩
-with open(image_path, "rb") as image_file:
-    image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
-    
-    # 이미지 타입 감지
-    if image_path.lower().endswith('.png'):
-        image_type = "image/png"
-    elif image_path.lower().endswith('.jpg') or image_path.lower().endswith('.jpeg'):
-        image_type = "image/jpeg"
-    else:
-        image_type = "image/jpeg"
-
-print(f"📸 이미지 로드 완료: {image_path}")
-print(f"   타입: {image_type}")
-print(f"   크기: {len(image_base64)} bytes (base64)")
+print(f"📸 S3 이미지 경로: {s3_uri}")
 print()
 
-# Bedrock Agent 연결 및 메시지 전송
-print("🔗 Bedrock Agent 연결 중...")
+# Knowledge Base에서 유사한 이미지 검색
+if not knowledge_base_id:
+    print("⚠️  Knowledge Base ID가 설정되지 않았습니다.")
+    print("   환경변수 KNOWLEDGE_BASE_ID 또는 config.py의 knowledge_base_id를 설정하세요.")
+    exit(1)
+
+print("🔎 Knowledge Base에서 유사한 제품 검색 중...")
+print(f"   Knowledge Base ID: {knowledge_base_id}")
+print()
+
 try:
-    print(f"   Agent ID: {AWSConfig.agent_id}")
-    print(f"   Alias ID: {AWSConfig.alias_id}")
-    print()
-
-    # 세션 ID 생성 (새 세션)
-    session_id = str(uuid.uuid4())
-    print(f"   Session ID: {session_id}")
-    print()
-
-    # 멀티모달 메시지 구성 (multi_modal.py와 동일한 형식)
-    # Bedrock Agent는 AWS Bedrock 메시지 형식을 사용
-    message_content = {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": image_type,
-                    "data": image_base64
-                }
-            },
-            {
-                "type": "text",
-                "text": "이 제품과 가장 유사한 제품을 찾아서 파일명을 알려줘"
+    # Knowledge Base 검색 쿼리 생성
+    # S3 URL을 텍스트로 포함하여 유사한 제품 검색
+    search_query = f"{s3_uri}"
+    
+    # retrieve API 사용 (Knowledge Base에서 직접 검색)
+    response = bedrock_agent_runtime.retrieve(
+        knowledgeBaseId=knowledge_base_id,
+        retrievalQuery={
+            "text": search_query
+        },
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 5  # 상위 5개 결과 반환
             }
-        ]
-    }
-    
-    # inputText로 전송 (JSON 문자열)
-    input_text = json.dumps(message_content, ensure_ascii=False)
-    
-    print("📤 이미지와 메시지 전송 중...")
-    
-    # Agent 호출
-    response = client.invoke_agent(
-        agentId=AWSConfig.agent_id,
-        agentAliasId=AWSConfig.alias_id,
-        sessionId=session_id,
-        inputText=input_text,
-        enableTrace=False
+        }
     )
     
-    print("✅ 메시지 전송 완료")
+    print("✅ 검색 완료")
     print()
-    print("📥 Agent 응답:")
+    print("📋 검색 결과:")
     print("-" * 50)
     
-    # 스트리밍 응답 처리
-    event_stream = response.get('completion')
-    full_response = ""
-    response_session_id = response.get('sessionId', '')
+    # 검색 결과 처리
+    retrieval_results = response.get('retrievalResults', [])
     
-    if response_session_id:
-        print(f"   Session ID: {response_session_id}")
-    
-    if event_stream:
-        try:
-            for event in event_stream:
-                if 'chunk' in event:
-                    chunk = event['chunk']
-                    if 'bytes' in chunk:
-                        # 응답 데이터 파싱
-                        try:
-                            chunk_data = json.loads(chunk['bytes'].decode('utf-8'))
-                            if isinstance(chunk_data, dict):
-                                if 'text' in chunk_data:
-                                    text = chunk_data['text']
-                                    print(text, end='', flush=True)
-                                    full_response += text
-                                elif 'content' in chunk_data:
-                                    # 다른 형식의 응답 처리
-                                    content = chunk_data['content']
-                                    if isinstance(content, list) and len(content) > 0:
-                                        if 'text' in content[0]:
-                                            text = content[0]['text']
-                                            print(text, end='', flush=True)
-                                            full_response += text
-                                    else:
-                                        print(json.dumps(chunk_data, ensure_ascii=False, indent=2))
-                            else:
-                                print(str(chunk_data), end='', flush=True)
-                                full_response += str(chunk_data)
-                        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                            # 바이너리 데이터인 경우 직접 출력 시도
-                            try:
-                                text = chunk['bytes'].decode('utf-8')
-                                print(text, end='', flush=True)
-                                full_response += text
-                            except:
-                                pass
-                    elif 'text' in chunk:
-                        # 직접 텍스트 응답
-                        text = chunk['text']
-                        print(text, end='', flush=True)
-                        full_response += text
-                elif 'returnControl' in event:
-                    # 제어 반환 이벤트
-                    print("\n[제어 반환 이벤트]")
-                    print(json.dumps(event['returnControl'], ensure_ascii=False, indent=2))
-                elif 'trace' in event:
-                    # 추적 이벤트 (enableTrace=True일 때)
-                    pass
-            
-            print()
-            print("-" * 50)
-            if full_response:
-                print(f"\n✅ 응답 완료")
-            else:
-                print(f"\n⚠️  응답이 비어있습니다")
-        except Exception as stream_error:
-            print(f"\n❌ 스트리밍 응답 처리 중 오류: {stream_error}")
-            import traceback
-            traceback.print_exc()
-    
-except client.exceptions.ValidationException as e:
+    if not retrieval_results:
+        print("⚠️  검색 결과가 없습니다.")
+    else:
+        # 가장 유사한 결과 (첫 번째 결과)
+        best_match = retrieval_results[0]
+        best_score = best_match.get('score', 0)
+        best_content = best_match.get('content', {})
+        best_text = best_content.get('text', '')
+        
+        # 파일명 추출 시도
+        filename = None
+        
+        # 메타데이터에서 파일명 찾기
+        metadata = best_match.get('metadata', {})
+        location = best_match.get('location', {})
+        
+        # S3 URI에서 파일명 추출
+        if 's3Location' in location:
+            s3_uri_result = location['s3Location'].get('uri', '')
+            if s3_uri_result:
+                # s3://bucket/key 형식에서 파일명 추출
+                if s3_uri_result.startswith('s3://'):
+                    filename = s3_uri_result.split('/')[-1]
+                else:
+                    filename = s3_uri_result.split('/')[-1]
+        
+        # 메타데이터에서 파일명 찾기
+        if not filename:
+            filename = metadata.get('file_name') or metadata.get('filename') or metadata.get('name')
+        
+        # 텍스트에서 파일명 패턴 찾기
+        if not filename and best_text:
+            import re
+            # 일반적인 이미지 파일 확장자 패턴
+            patterns = [
+                r'([^\s]+\.(jpg|jpeg|png|gif|webp))',
+                r'파일명[:\s]+([^\s]+)',
+                r'filename[:\s]+([^\s]+)',
+                r's3://[^/]+/[^/]+/([^\s]+\.(jpg|jpeg|png|gif|webp))',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, best_text, re.IGNORECASE)
+                if match:
+                    filename = match.group(1) if match.groups() else match.group(0)
+                    break
+        
+        print(f"🎯 가장 유사한 제품:")
+        print(f"   유사도 점수: {best_score:.4f}")
+        if filename:
+            print(f"   파일명: {filename}")
+        else:
+            print(f"   파일명: (추출 불가)")
+        print(f"   내용: {best_text[:200]}...")
+        print()
+        
+        # 다른 결과들도 표시
+        if len(retrieval_results) > 1:
+            print("📊 다른 검색 결과:")
+            for i, result in enumerate(retrieval_results[1:], 2):
+                score = result.get('score', 0)
+                content = result.get('content', {})
+                text = content.get('text', '')
+                
+                # 각 결과에서도 파일명 추출 시도
+                result_filename = None
+                result_location = result.get('location', {})
+                if 's3Location' in result_location:
+                    result_s3_uri = result_location['s3Location'].get('uri', '')
+                    if result_s3_uri:
+                        result_filename = result_s3_uri.split('/')[-1]
+                
+                filename_display = result_filename if result_filename else "(추출 불가)"
+                print(f"   {i}. 점수: {score:.4f}, 파일명: {filename_display}, 내용: {text[:100]}...")
+        
+        print("-" * 50)
+        
+        # 파일명 반환
+        if filename:
+            print(f"\n✅ 가장 유사한 제품 파일명: {filename}")
+        else:
+            print(f"\n⚠️  파일명을 자동으로 추출할 수 없습니다.")
+            print(f"   검색 결과 텍스트를 확인하세요:")
+            print(f"   {best_text}")
+
+except bedrock_agent_runtime.exceptions.ValidationException as e:
     print(f"❌ 검증 오류: {e}")
     print("\n💡 해결 방법:")
-    print("   1. Agent ID와 Alias ID가 올바른지 확인")
-    print("   2. Agent가 활성화되어 있는지 확인")
-    print("   3. Agent에 필요한 권한이 있는지 확인")
-except client.exceptions.AccessDeniedException as e:
+    print("   1. Knowledge Base ID가 올바른지 확인")
+    print("   2. Knowledge Base가 활성화되어 있는지 확인")
+    print("   3. Knowledge Base 접근 권한 확인")
+except bedrock_agent_runtime.exceptions.AccessDeniedException as e:
     print(f"❌ 접근 거부: {e}")
     print("\n💡 해결 방법:")
     print("   1. AWS 자격 증명 확인")
-    print("   2. Agent 접근 권한 확인")
+    print("   2. Knowledge Base 접근 권한 확인")
 except Exception as e:
     print(f"❌ 오류 발생: {e}")
     import traceback
     traceback.print_exc()
+    
+    # retrieve API가 지원되지 않을 경우, retrieve_and_generate 시도
+    print("\n🔄 retrieve_and_generate API 시도 중...")
+    try:
+        response = bedrock_agent_runtime.retrieve_and_generate(
+            input={
+                "text": search_query
+            },
+            retrieveAndGenerateConfiguration={
+                "type": "KNOWLEDGE_BASE",
+                "knowledgeBaseConfiguration": {
+                    "knowledgeBaseId": knowledge_base_id,
+                    "modelArn": f"arn:aws:bedrock:{region}::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0"
+                }
+            }
+        )
+        
+        print("✅ retrieve_and_generate 성공")
+        output = response.get('output', {})
+        text = output.get('text', '')
+        
+        print("\n📋 결과:")
+        print("-" * 50)
+        print(text)
+        print("-" * 50)
+        
+        # 파일명 추출
+        import re
+        patterns = [
+            r'([^\s]+\.(jpg|jpeg|png|gif|webp))',
+            r'파일명[:\s]+([^\s]+)',
+            r'filename[:\s]+([^\s]+)',
+            r's3://[^/]+/[^/]+/([^\s]+\.(jpg|jpeg|png|gif|webp))',
+        ]
+        filename = None
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                filename = match.group(1) if match.groups() else match.group(0)
+                break
+        
+        if filename:
+            print(f"\n✅ 파일명: {filename}")
+        else:
+            print(f"\n⚠️  파일명을 자동으로 추출할 수 없습니다.")
+        
+    except Exception as e2:
+        print(f"❌ retrieve_and_generate도 실패: {e2}")

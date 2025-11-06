@@ -31,6 +31,6 @@ if __name__ == "__main__":
     with open("testcan.jpg", "rb") as f:
         image_bytes = f.read()
 
-    question = "이 사진 품목이 무엇인가요?"
+    question = "이 사진에서 뭐가 보이나요?"
     answer = query_agent(question, image_bytes)
     print("Agent 답변:", answer)

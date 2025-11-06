@@ -14,7 +14,7 @@ except ImportError:
 
 # 설정
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "posco-bedrock-vector-s3-12jo")
-S3_FOLDER = os.getenv("S3_FOLDER", "wx_hackerton/product_pic")
+S3_FOLDER = os.getenv("S3_FOLDER", "wx_hackerton/product_new")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
@@ -23,7 +23,7 @@ def upload_image():
     
     # 업로드할 파일 경로 (대소문자 구분 없이 찾기)
     file_path = None
-    for filename in ["test.png", "test.PNG", "test.jpg", "test.JPG"]:
+    for filename in ["testcan.jpg"]:
         if os.path.exists(filename):
             file_path = filename
             break
