@@ -1,28 +1,46 @@
+import os
+from dotenv import load_dotenv
 import streamlit as st
-import time
+import boto3
 
+load_dotenv()
 # --- 1. AI 에이전트 API 호출 시뮬레이션 ---
 # @st.cache_data: 이 함수는 입력값(report_id)이 동일하면
 # 이전에 실행한 결과를 캐시했다가 즉시 반환합니다.
 # 실제 API 호출 시 네트워크 비용을 절약하고 앱 속도를 향상시킵니다.
 @st.cache_data
-def fetch_ai_report() -> str:
+def fetch_ai_report(q_code: str = "Q12345") -> str:
     """
     지정된 report_id를 기반으로 AI 에이전트 API를 호출한다고 가정하는 함수.
     실제 구현 시 이 부분에 `requests.get(...)` 등의 로직이 들어갑니다.
     """
-    print(f"--- API 호출 실행--- ")
-    
-    # API 호출에 시간이 걸리는 것을 시뮬레이션
-    time.sleep(2) 
-    
+    dynamodb = boto3.client(
+      'dynamodb',
+      region_name=os.getenv('AWS_REGION'),
+      aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+      aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+    )
+
+    response = dynamodb.query(
+      TableName='TargetPriceTB',
+      KeyConditionExpression='qcode = :q',
+      ExpressionAttributeValues={
+        ':q': {'S': q_code}  
+      },
+      ScanIndexForward=False,  
+      Limit=1                  
+  ) 
+    item = response.get('Items')[0]
+    print(item)
+
+  
     # AI가 마크다운 형식의 텍스트를 반환했다고 가정
     report_text = f"""
     
 
     ## 1. 종합 요약
     
-    본 리포트는 000 항목에 대한 심층 분석 결과를 제공합니다. 
+    본 리포트는 {q_code} 항목에 대한 심층 분석 결과를 제공합니다. 
     분석 결과, 긍정적인 신호가 70%, 주의가 필요한 신호가 30%로 감지되었습니다.
 
     - **주요 긍정 요인:**
@@ -121,22 +139,26 @@ st.markdown(f"""
 st.title("AI 에이전트 분석 리포트 📄")
 st.caption("AI가 생성한 텍스트를 기반으로 자동 생성된 페이지입니다.")
 
-# --- 3. 메인 로직 실행 (페이지 로드 시 즉시) ---
-# 페이지가 로드되면 항상 API를 호출하도록 변경
-# (쿼리 파라미터 로직 제거)
 
-# 고정된 리포트 ID를 사용하거나, API가 ID를 요구하지 않는다면 None
-# 여기서는 시뮬레이션을 위해 고정 ID 사용
+# query parameter에서 qcode 가져오기
+q_code = st.query_params.get("qcode")
 
 # 사이드바에 현재 리포트 ID 표시
 st.sidebar.header("리포트 정보")
 
+# report_id가 없으면 에러 메시지 표시
+if not q_code:
+    st.error("⚠️ qcode가 필요합니다. URL에 `?qcode=값`을 추가해주세요.")
+    st.info("예시: `https://poscohackerthon-report.streamlit.app?qcode=123`")
+    st.stop()
+
+
+st.sidebar.info(f"**Q-CODE:** {q_code}")
 
 # 페이지가 로드되면 스피너를 표시하며 API 호출 함수 실행
-with st.spinner(f"000 리포트 데이터를 불러오는 중..."):
+with st.spinner(f"{q_code} 리포트 데이터를 불러오는 중..."):
     try:
-        # 캐시된 함수 호출 (실제 API 요청 시뮬레이션)
-        report_data = fetch_ai_report()
+        report_data = fetch_ai_report(q_code)
         
         # AI가 반환한 마크다운 텍스트를 페이지에 렌더링
         st.markdown(report_data)
