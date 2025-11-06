@@ -162,7 +162,7 @@ const LiveInventory = () => {
       }
     });
   }, [alerts]);
-  }, [selectedProducts]); // 선택된 제품이 변경되면 알림 업데이트
+
 
   // 재고 이력 가져오기 (재고 현황이 로드된 후)
   useEffect(() => {
