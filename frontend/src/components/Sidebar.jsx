@@ -5,7 +5,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { path: '/', label: '홈', icon: '🏠' },
-    { path: '/register', label: 'AI Q CODE 등록', icon: '📸' },
+    { path: '/register', label: 'AI Q-CODE', icon: '🤖' },
     { path: '/inventory', label: '실시간 재고현황', icon: '📹' },
     { path: '/products', label: '제품 목록', icon: '📋' },
   ];
@@ -38,7 +38,8 @@ const Sidebar = () => {
 
       {/* Footer */}
       <div className="p-4 text-center text-sm text-blue-200 border-t border-blue-400">
-        <p>© 2024 Q-CODE System</p>
+        <p>WX해커톤 2025</p>
+        <p className="mt-1">Blmacpink</p>
       </div>
     </div>
   );

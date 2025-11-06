@@ -14,9 +14,11 @@ const ProductList = () => {
     try {
       const response = await fetch('http://localhost:8000/api/products');
       const data = await response.json();
-      setProducts(data);
+      // 백엔드는 { total, products } 형식으로 반환
+      setProducts(data.products || []);
     } catch (error) {
       console.error('Error fetching products:', error);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
