@@ -336,29 +336,8 @@ const LiveInventory = () => {
       />
 
       <div className="bg-white rounded-lg shadow-md p-8">
-        {/* 카메라 선택 및 컨트롤 */}
-        <div className="mb-6 flex items-center gap-4">
-          {/* 카메라 선택 드롭다운 */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">
-              카메라 선택:
-            </label>
-            <select
-              value={selectedDeviceId || ''}
-              onChange={(e) => setSelectedDeviceId(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {availableDevices.map((device, index) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || `카메라 ${index + 1}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         {/* 컨트롤 버튼 */}
-        <div className="mb-6 flex gap-4 flex-wrap">
+        <div className="mb-6 flex gap-4 flex-wrap items-center">
           {!isScanning ? (
             <button
               onClick={startScanning}
@@ -391,6 +370,24 @@ const LiveInventory = () => {
           >
             📸 사진 찍기
           </button>
+
+          {/* 카메라 선택 드롭다운 */}
+          <div className="flex items-center gap-2 ml-2">
+            <label className="text-sm font-medium text-gray-700">
+              카메라:
+            </label>
+            <select
+              value={selectedDeviceId || ''}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {availableDevices.map((device, index) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || `카메라 ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {isScanning && (
             <div className="flex items-center gap-2 px-4 py-3 bg-green-100 text-green-800 rounded-lg">

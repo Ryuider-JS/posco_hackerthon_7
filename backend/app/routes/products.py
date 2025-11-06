@@ -104,10 +104,19 @@ async def create_product(
     material: Optional[str] = Form(None),
     specs: Optional[str] = Form(None),
     last_price: Optional[float] = Form(0.0),
+    # 카탈로그 정보 추가
+    n2b_product_code: Optional[str] = Form(None),
+    model_name: Optional[str] = Form(None),
+    manufacturer: Optional[str] = Form(None),
+    sourcing_group: Optional[str] = Form(None),
+    leaf_class: Optional[str] = Form(None),
+    standard_name: Optional[str] = Form(None),
+    attributes: Optional[str] = Form(None),  # JSON string
     db: Session = Depends(get_db)
 ):
     """
     Register a new product with Q-CODE
+    확장 필드: model_name, manufacturer, n2b_product_code, attributes (JSON)
     """
     try:
         # Generate Q-CODE
@@ -126,7 +135,15 @@ async def create_product(
             specs=specs,
             last_price=last_price,
             purchase_count=0,
-            average_rating=0.0
+            average_rating=0.0,
+            # 카탈로그 정보
+            n2b_product_code=n2b_product_code,
+            model_name=model_name,
+            manufacturer=manufacturer,
+            sourcing_group=sourcing_group,
+            leaf_class=leaf_class,
+            standard_name=standard_name,
+            attributes=attributes  # JSON string 그대로 저장
         )
 
         db.add(new_product)
@@ -177,15 +194,29 @@ async def list_products(
     limit: int = 100,
     category: Optional[str] = None,
     search: Optional[str] = None,
+    manufacturer: Optional[str] = None,
+    sourcing_group: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     List all products with optional filtering
+
+    Filters:
+    - category: 제품 카테고리
+    - search: 제품명, Q-CODE, 스펙, 모델명, 제조사, 엔투비품번, 재질 검색
+    - manufacturer: 제조사 필터
+    - sourcing_group: 표준소싱그룹 필터
     """
     query = db.query(Product)
 
     if category:
         query = query.filter(Product.category == category)
+
+    if manufacturer:
+        query = query.filter(Product.manufacturer == manufacturer)
+
+    if sourcing_group:
+        query = query.filter(Product.sourcing_group == sourcing_group)
 
     if search:
         search_term = f"%{search}%"
@@ -193,7 +224,12 @@ async def list_products(
             (Product.name.like(search_term)) |
             (Product.description.like(search_term)) |
             (Product.qcode.like(search_term)) |
-            (Product.material.like(search_term))
+            (Product.material.like(search_term)) |
+            (Product.specs.like(search_term)) |
+            (Product.model_name.like(search_term)) |
+            (Product.manufacturer.like(search_term)) |
+            (Product.standard_name.like(search_term)) |
+            (Product.n2b_product_code.like(search_term))
         )
 
     products = query.offset(skip).limit(limit).all()
