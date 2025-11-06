@@ -260,9 +260,13 @@ def detect_products_in_frame(image_path: str) -> Dict:
         print(f"[*] Roboflow Object Detection: Detecting products in frame...")
         print(f"    Model ID: {ROBOFLOW_MODEL_ID}")
 
-        # Roboflow Inference API 호출
+        # Roboflow Inference API 호출 (Multipart 방식)
         url = f"{INFERENCE_URL}/{ROBOFLOW_MODEL_ID}"
+        print(f"    Request URL: {url}")
+        print(f"    API Key: {ROBOFLOW_API_KEY[:10]}...{ROBOFLOW_API_KEY[-4:]}")
+        print(f"    Image path: {image_path}")
 
+        # Multipart/form-data로 전송
         with open(image_path, "rb") as image_file:
             response = requests.post(
                 url,
@@ -270,27 +274,41 @@ def detect_products_in_frame(image_path: str) -> Dict:
                 files={"file": image_file}
             )
 
+        print(f"    Response Status: {response.status_code}")
         if response.status_code != 200:
+            print(f"    Response Body: {response.text}")
             raise Exception(f"Inference API error: {response.status_code} - {response.text}")
 
         result = response.json()
 
         # 각 클래스(Q-CODE)별 개수 카운트
         detections = result.get("predictions", [])
+        print(f"    [DEBUG] Total predictions: {len(detections)}")
+        if detections:
+            print(f"    [DEBUG] First prediction: {detections[0]}")
         product_counts = {}
 
         for detection in detections:
             class_name = detection.get("class", "unknown")
             confidence = detection.get("confidence", 0.0)
+            print(f"    [DEBUG] Detected class: '{class_name}', confidence: {confidence:.2f}")
 
             # 클래스 이름을 Q-CODE로 변환
             qcode = CLASS_NAME_TO_QCODE.get(class_name, class_name)
 
             if qcode not in product_counts:
-                product_counts[qcode] = {"count": 0, "confidences": []}
+                product_counts[qcode] = {"count": 0, "confidences": [], "boxes": []}
 
             product_counts[qcode]["count"] += 1
             product_counts[qcode]["confidences"].append(confidence)
+            # 바운딩 박스 정보 저장
+            product_counts[qcode]["boxes"].append({
+                "x": detection.get("x"),
+                "y": detection.get("y"),
+                "width": detection.get("width"),
+                "height": detection.get("height"),
+                "confidence": confidence
+            })
 
         # 평균 confidence 계산
         detected_products = []
@@ -299,7 +317,8 @@ def detect_products_in_frame(image_path: str) -> Dict:
             detected_products.append({
                 "qcode": qcode,
                 "count": data["count"],
-                "confidence": float(avg_confidence)
+                "confidence": float(avg_confidence),
+                "bounding_boxes": data["boxes"]  # 바운딩 박스 정보 추가
             })
             print(f"    [DETECTED] {qcode}: {data['count']} items (conf: {avg_confidence:.2f})")
 
@@ -310,7 +329,8 @@ def detect_products_in_frame(image_path: str) -> Dict:
         return {
             "success": True,
             "detected_products": detected_products,
-            "total_count": total_count
+            "total_count": total_count,
+            "raw_predictions": detections  # 전체 예측 결과도 포함
         }
 
     except Exception as e:

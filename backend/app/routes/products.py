@@ -319,6 +319,10 @@ async def detect_qcode(
     웹캠 프레임에서 Q-CODE 제품 감지 및 재고 카운팅
     Roboflow Object Detection 사용 (Gemini 대체)
     """
+    print("\n" + "="*80)
+    print("[API CALL] /api/detect-qcode - 웹캠 프레임 수신")
+    print("="*80)
+
     try:
         # 1. 웹캠 프레임 저장
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

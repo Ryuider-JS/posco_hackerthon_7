@@ -115,10 +115,41 @@ const LiveInventory = () => {
     }
   };
 
+  // 바운딩 박스 그리기
+  const drawBoundingBoxes = (canvas, predictions) => {
+    const ctx = canvas.getContext('2d');
+
+    // 각 예측에 대해 바운딩 박스 그리기
+    predictions.forEach((pred) => {
+      const x = pred.x - pred.width / 2;
+      const y = pred.y - pred.height / 2;
+      const width = pred.width;
+      const height = pred.height;
+
+      // 박스 그리기
+      ctx.strokeStyle = '#00ff00'; // 초록색
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+
+      // 라벨 배경
+      const label = `${pred.class} ${(pred.confidence * 100).toFixed(0)}%`;
+      ctx.font = '16px Arial';
+      const textWidth = ctx.measureText(label).width;
+
+      ctx.fillStyle = '#00ff00';
+      ctx.fillRect(x, y - 25, textWidth + 10, 25);
+
+      // 라벨 텍스트
+      ctx.fillStyle = '#000000';
+      ctx.fillText(label, x + 5, y - 7);
+    });
+  };
+
   // 프레임 캡처 및 Q-CODE 감지 (다중 제품 지원)
   const captureAndDetect = async () => {
     if (!videoRef.current || isProcessing) return;
 
+    console.log('[LiveInventory] 프레임 캡처 시작...');
     setIsProcessing(true);
 
     try {
@@ -133,26 +164,40 @@ const LiveInventory = () => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+      console.log('[LiveInventory] Canvas에 프레임 그리기 완료');
+
       // Canvas를 Blob으로 변환
       canvas.toBlob(async (blob) => {
         if (!blob) {
+          console.error('[LiveInventory] Blob 생성 실패');
           setIsProcessing(false);
           return;
         }
 
+        console.log('[LiveInventory] Blob 생성 완료, API 호출 중...');
         const formData = new FormData();
         formData.append('file', blob, 'frame.jpg');
 
         try {
           // 백엔드 API 호출 (새 엔드포인트: 다중 제품 지원)
+          console.log('[LiveInventory] API URL: http://localhost:8000/api/detect-qcode');
           const response = await fetch('http://localhost:8000/api/detect-qcode', {
             method: 'POST',
             body: formData
           });
 
+          console.log('[LiveInventory] API 응답 수신:', response.status);
+
           const data = await response.json();
+          console.log('[LiveInventory] API 응답 데이터:', data);
+
+          // 바운딩 박스 그리기
+          if (data.raw_predictions && data.raw_predictions.length > 0) {
+            drawBoundingBoxes(canvas, data.raw_predictions);
+          }
 
           if (data.success && data.detected_products && data.detected_products.length > 0) {
+            console.log('[LiveInventory] 제품 감지됨:', data.detected_products.length, '개');
             // 감지된 제품들을 감지 이력에 추가
             const now = new Date();
             const newDetections = data.detected_products.map(product => ({
@@ -167,9 +212,11 @@ const LiveInventory = () => {
             // 재고 현황 갱신
             fetchCurrentInventory();
             fetchAlerts();
+          } else {
+            console.log('[LiveInventory] 감지된 제품 없음 또는 실패:', data);
           }
         } catch (error) {
-          console.error('Q-CODE 감지 API 호출 실패:', error);
+          console.error('[LiveInventory] Q-CODE 감지 API 호출 실패:', error);
         } finally {
           setIsProcessing(false);
         }
