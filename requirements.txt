@@ -1,3 +1,5 @@
 streamlit
 boto3
 dotenv
+pandas
+altair
