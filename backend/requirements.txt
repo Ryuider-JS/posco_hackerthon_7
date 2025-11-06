@@ -9,3 +9,4 @@ google-cloud-vision==3.8.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 aiofiles==24.1.0
+boto3==1.40.67

@@ -44,6 +44,7 @@ const LiveInventory = () => {
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false);
   const [inventoryHistory, setInventoryHistory] = useState({});
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
 
   // 사용 가능한 카메라 목록 가져오기
   useEffect(() => {
@@ -125,7 +126,7 @@ const LiveInventory = () => {
     }, 10000); // 10초마다
 
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedProducts]); // selectedProducts가 변경되면 알림 재조회
 
   // 재고 부족 알림이 생기면 Bedrock Agent에 Q-CODE 전달
   useEffect(() => {
@@ -196,6 +197,7 @@ const LiveInventory = () => {
   // 재고 부족 알림 조회
   const fetchAlerts = async () => {
     try {
+      setIsLoadingAlerts(true);
       // 선택된 제품이 있으면 쿼리 파라미터 추가
       let url = 'http://localhost:8000/api/inventory/alerts';
       if (selectedProducts.length > 0) {
@@ -207,6 +209,9 @@ const LiveInventory = () => {
       setAlerts(data.alerts || []);
     } catch (error) {
       console.error('알림 조회 실패:', error);
+      setAlerts([]); // 에러 시 빈 배열로 초기화
+    } finally {
+      setIsLoadingAlerts(false);
     }
   };
 
@@ -507,26 +512,26 @@ const LiveInventory = () => {
             disabled={detectedProducts.length === 0}
             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
           >
-            🗑 감지 이력 초기화
+            🗑 초기화
           </button>
 
           <button
             onClick={captureSnapshot}
             disabled={webcamError}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold transition-colors"
+            className="px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold transition-colors"
           >
-            📸 사진 찍기
+            📸 촬영
           </button>
 
           {/* 카메라 선택 드롭다운 */}
-          <div className="flex items-center gap-2 ml-2">
+          <div className="flex items-center gap-1 ml-2">
             <label className="text-sm font-medium text-gray-700">
               카메라:
             </label>
             <select
               value={selectedDeviceId || ''}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {availableDevices.map((device, index) => (
                 <option key={device.deviceId} value={device.deviceId}>

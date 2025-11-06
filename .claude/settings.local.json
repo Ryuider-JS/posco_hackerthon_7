@@ -7,7 +7,8 @@
       "Bash(python -m uvicorn:*)",
       "Bash(find:*)",
       "Bash(sqlite3:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []
