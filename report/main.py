@@ -1,19 +1,16 @@
 import os
+import boto3
+import requests
 from dotenv import load_dotenv
 import streamlit as st
-import boto3
+import pandas as pd
+from datetime import datetime, timedelta
+import altair as alt
 
 load_dotenv()
-# --- 1. AI 에이전트 API 호출 시뮬레이션 ---
-# @st.cache_data: 이 함수는 입력값(report_id)이 동일하면
-# 이전에 실행한 결과를 캐시했다가 즉시 반환합니다.
-# 실제 API 호출 시 네트워크 비용을 절약하고 앱 속도를 향상시킵니다.
+
 @st.cache_data
 def fetch_ai_report(q_code: str = "Q12345") -> str:
-    """
-    지정된 report_id를 기반으로 AI 에이전트 API를 호출한다고 가정하는 함수.
-    실제 구현 시 이 부분에 `requests.get(...)` 등의 로직이 들어갑니다.
-    """
     dynamodb = boto3.client(
       'dynamodb',
       region_name=os.getenv('AWS_REGION'),
@@ -31,50 +28,144 @@ def fetch_ai_report(q_code: str = "Q12345") -> str:
       Limit=1                  
   ) 
     item = response.get('Items')[0]
-    print(item)
+    render_report(item)
 
-  
-    # AI가 마크다운 형식의 텍스트를 반환했다고 가정
-    report_text = f"""
-    
+def render_report(item):
+    st.markdown("""
+    <style>
+    .report-box {
+        border: 2px solid #003B5C;
+        border-radius: 12px;
+        padding: 20px 30px;
+        background-color: #f9fbfc;
+        margin-bottom: 25px;
+    }
+    .report-title {
+        background-color: #003B5C;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+    table.custom {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+    table.custom th {
+        background-color: #e6eef2;
+        color: #003B5C;
+        text-align: center;
+        padding: 6px;
+        border: 1px solid #cccccc;
+    }
+    table.custom td {
+        text-align: center;
+        padding: 6px;
+        border: 1px solid #dddddd;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    ## 1. 종합 요약
-    
-    본 리포트는 {q_code} 항목에 대한 심층 분석 결과를 제공합니다. 
-    분석 결과, 긍정적인 신호가 70%, 주의가 필요한 신호가 30%로 감지되었습니다.
+    price_list = item["가격비교표"]["L"]
+    rows = []
+    for entry in price_list:
+        m = entry["M"]
+        rows.append({
+            "제조사": m["제조사"]["S"],
+            "모델": m["모델"]["S"],
+            "사양": m["사양"]["S"],
+            "KRW 환산": m["KRW환산"]["S"],
+            "MOQ / 리드타임": m["MOQ_리드타임"]["S"],
+            "출처 URL": f"<a href='{m['출처URL']['S']}' target='_blank'>링크</a>"
+        })
+    df = pd.DataFrame(rows)
 
-    - **주요 긍정 요인:**
-        - 시장 점유율 지속적 증가
-        - 신규 유저 유입률 20% 상승
-    - **주요 리스크 요인:**
-        - 경쟁사 신제품 출시
-        - 운영 비용 소폭 증가
+    html_table = df.to_html(escape=False, index=False, classes="custom")
 
-    ## 2. 상세 데이터 분석
+    st.markdown(f"""
+    <div class="report-box">
+        <div class="report-title">시장가 비교표</div>
+        {html_table}
+    </div>
+    """, unsafe_allow_html=True)
 
-    ### 2.1. 사용자 동향
-    최근 30일간 사용자 유입 경로는 다음과 같습니다.
-    
-    | 유입 경로 | 비율 | 전월 대비 |
-    | :--- | :---: | :---: |
-    | 오가닉 검색 | 45% | +5% |
-    | 소셜 미디어 | 30% | +2% |
-    | 유료 광고 | 25% | -7% |
+    stats = item["통계요약"]["M"]
+    st.markdown(f"""
+    <div class="report-box">
+        <div class="report-title">통계 요약</div>
+        <table class="custom">
+            <tr><th>가중 중앙값</th><th>IQR (P25~P75)</th><th>권장 협상 밴드</th></tr>
+            <tr>
+                <td>{stats["가중중앙값"]["S"]}</td>
+                <td>{stats["IQR_P25_P75"]["S"]}</td>
+                <td>{stats["권장협상밴드"]["S"]}</td>
+            </tr>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
 
-    ### 2.2. 감성 분석 (Sentiment)
-    관련 소셜 데이터에서 "만족", "추천"과 같은 긍정 키워드가 15% 증가했습니다. 
-    반면, "불편", "오류"와 같은 부정 키워드는 3% 감소하여 전반적인 사용자 만족도가 
-    개선된 것으로 보입니다.
+    end_date = datetime.today().date()
+    start_date = end_date - timedelta(days=30)
 
-    ## 3. 결론 및 제언
-    
-    종합적으로 볼 때,  항목은 긍정적인 성장 궤도에 있습니다. 
-    유료 광고 효율성 개선에 집중하고, 감지된 리스크 요인을 지속적으로 
-    모니터링할 것을 권장합니다.
-    """
-    return report_text
 
-# --- 2. Streamlit 앱 메인 페이지 구성 ---
+    url = (
+        f"https://api.apilayer.com/exchangerates_data/timeseries"
+        f"?start_date={start_date}&end_date={end_date}&base=USD&symbols=KRW"
+    )
+
+    headers = {
+        "apikey": os.getenv('APILAYER_ACCESS_KEY'),
+    }
+    # 3. API 요청
+    response = requests.get(url, headers=headers)
+    data = response.json()
+
+    if data.get("success", False):
+        rates = data["rates"]
+
+    # DataFrame 생성
+        df = pd.DataFrame([
+            {"날짜": date, "환율(KRW/USD)": rates[date]["KRW"]}
+            for date in sorted(rates.keys())
+        ])
+
+    # 날짜형 변환
+        df["날짜"] = pd.to_datetime(df["날짜"])
+
+    # Streamlit 꺾은선 그래프 표시
+        st.subheader("📈 최근 1개월 USD → KRW 환율 추이")
+        min_y = df["환율(KRW/USD)"].min()
+        max_y = df["환율(KRW/USD)"].max()
+
+        chart = alt.Chart(df).mark_line(point=True).encode(
+            x="날짜:T",
+            y=alt.Y("환율(KRW/USD):Q", scale=alt.Scale(domain=[min_y - 5, max_y + 5])),
+            tooltip=["날짜", alt.Tooltip("환율(KRW/USD):Q", format=".2f")]
+        ).properties(
+            title="최근 1개월 원/달러 환율 추이",
+            height=400
+        )
+
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.error(f"데이터를 불러오지 못했습니다.\n{data}")
+
+    insight = item["전략적구매인사이트"]["M"]
+    st.markdown(f"""
+    <div class="report-box">
+        <div class="report-title">전략적 구매 인사이트</div>
+        <table class="custom">
+            <tr><th>시장 동향</th><td>{insight["시장동향"]["S"]}</td></tr>
+            <tr><th>가격 포지셔닝</th><td>{insight["가격포지셔닝"]["S"]}</td></tr>
+            <tr><th>조달 리스크</th><td>{insight["조달리스크"]["S"]}</td></tr>
+            <tr><th>전략 제언</th><td>{insight["전략제언"]["S"]}</td></tr>
+            <tr><th>권장 조치</th><td>{insight["권장조치"]["S"]}</td></tr>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
 
 # 페이지 설정을 넓은 레이아웃으로 변경
 st.set_page_config(page_title="AI 분석 리포트", layout="wide")
@@ -139,33 +230,18 @@ st.markdown(f"""
 st.title("AI 에이전트 분석 리포트 📄")
 st.caption("AI가 생성한 텍스트를 기반으로 자동 생성된 페이지입니다.")
 
-
 # query parameter에서 qcode 가져오기
 q_code = st.query_params.get("qcode")
 
-# 사이드바에 현재 리포트 ID 표시
-st.sidebar.header("리포트 정보")
-
-# report_id가 없으면 에러 메시지 표시
 if not q_code:
-    st.error("⚠️ qcode가 필요합니다. URL에 `?qcode=값`을 추가해주세요.")
-    st.info("예시: `https://poscohackerthon-report.streamlit.app?qcode=123`")
+    st.error("⚠️ qcode가 필요합니다. URL에 ?qcode=값을 추가해주세요.")
+    st.info("예시: https://poscohackerthon-report.streamlit.app?qcode=123")
     st.stop()
-
-
-st.sidebar.info(f"**Q-CODE:** {q_code}")
 
 # 페이지가 로드되면 스피너를 표시하며 API 호출 함수 실행
 with st.spinner(f"{q_code} 리포트 데이터를 불러오는 중..."):
     try:
         report_data = fetch_ai_report(q_code)
-        
-        # AI가 반환한 마크다운 텍스트를 페이지에 렌더링
-        st.markdown(report_data)
-
-        # AI가 반환한 원본 텍스트를 확인하고 싶을 경우를 대비
-        with st.expander("AI 원본 응답 (Raw Text) 보기"):
-            st.text(report_data)
 
     except Exception as e:
         st.error(f"리포트를 불러오는 중 오류가 발생했습니다: {e}")
